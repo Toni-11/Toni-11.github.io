@@ -1,0 +1,91 @@
+name: Add Student Attendance GitHub Link
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-portfolio:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add GitHub button only if missing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          url = 'https://github.com/Toni-11/student-attendance-grade-system'
+
+          if url in s:
+              print('Link already exists; no changes needed.')
+              raise SystemExit(0)
+
+          title = 'Student Attendance & Grade Management System'
+          title_pos = s.find(title)
+          if title_pos == -1:
+              raise SystemExit('Target project card not found; refusing to modify the file.')
+
+          card_start = s.rfind('<div class="project-card"', 0, title_pos)
+          if card_start == -1:
+              raise SystemExit('Target project-card container not found; refusing to modify the file.')
+
+          i = card_start
+          depth = 0
+          while i < len(s):
+              if s.startswith('<div', i):
+                  depth += 1
+                  i = s.find('>', i) + 1
+                  continue
+              if s.startswith('</div>', i):
+                  depth -= 1
+                  if depth == 0:
+                      card_end = i
+                      break
+                  i += len('</div>')
+                  continue
+              i += 1
+          else:
+              raise SystemExit('Could not determine card boundary; refusing to modify the file.')
+
+          button = '''\n        <div style="display:flex; gap:12px; margin-top:16px;">\n          <a href="https://github.com/Toni-11/student-attendance-grade-system" target="_blank" class="btn btn-outline" style="padding:8px 18px; font-size:0.82rem;">\n            <i class="fa-brands fa-github"></i> GitHub\n          </a>\n        </div>\n'''
+
+          s = s[:card_end] + button + s[card_end:]
+          p.write_text(s, encoding='utf-8')
+          print('Added exactly one GitHub button to the target project card.')
+          PY
+
+      - name: Verify and commit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('index.html').read_text(encoding='utf-8')
+          url = 'https://github.com/Toni-11/student-attendance-grade-system'
+          assert s.count(url) == 1, f'Expected exactly 1 target URL, found {s.count(url)}'
+          assert s.count('<h3>Student Attendance & Grade Management System</h3>') == 1
+          print('Verification passed.')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Add GitHub link for student attendance project"
+          git push
+
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          rm -f .github/workflows/add-student-github-link.yml
+          git add .github/workflows/add-student-github-link.yml
+          git commit -m "Remove temporary portfolio patch workflow" || true
+          git push || true
