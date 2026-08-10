@@ -1,0 +1,85 @@
+name: Add Student Presentation Button
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-portfolio:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add colored presentation button only if missing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          url = 'https://github.com/Toni-11/student-attendance-grade-system/blob/main/Student-Attendance-and-Grade-System.pdf'
+
+          if url in s:
+              print('Presentation button already exists; no changes needed.')
+              raise SystemExit(0)
+
+          title = 'Student Attendance & Grade Management System'
+          title_pos = s.find(title)
+          if title_pos == -1:
+              raise SystemExit('Target project card not found; refusing to modify the file.')
+
+          card_start = s.rfind('<div class="project-card"', 0, title_pos)
+          if card_start == -1:
+              raise SystemExit('Target project-card container not found; refusing to modify the file.')
+
+          i = card_start
+          depth = 0
+          card_end = None
+          while i < len(s):
+              if s.startswith('<div', i):
+                  depth += 1
+                  end = s.find('>', i)
+                  if end == -1:
+                      break
+                  i = end + 1
+                  continue
+              if s.startswith('</div>', i):
+                  depth -= 1
+                  if depth == 0:
+                      card_end = i
+                      break
+                  i += len('</div>')
+                  continue
+              i += 1
+
+          if card_end is None:
+              raise SystemExit('Could not determine card boundary; refusing to modify the file.')
+
+          button = '''\n  <div style="display:flex; gap:12px; margin-top:16px;">\n    <a href="https://github.com/Toni-11/student-attendance-grade-system/blob/main/Student-Attendance-and-Grade-System.pdf" target="_blank" class="btn btn-primary" style="padding:8px 18px; font-size:0.82rem;">\n      <i class="fa-solid fa-file-pdf"></i> View Presentation\n    </a>\n  </div>\n'''
+
+          s = s[:card_end] + button + s[card_end:]
+          p.write_text(s, encoding='utf-8')
+          print('Added colored View Presentation button.')
+          PY
+
+      - name: Verify, commit, and remove workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('index.html').read_text(encoding='utf-8')
+          url = 'https://github.com/Toni-11/student-attendance-grade-system/blob/main/Student-Attendance-and-Grade-System.pdf'
+          assert s.count(url) == 1, f'Expected exactly 1 presentation URL, found {s.count(url)}'
+          assert s.count('<h3>Student Attendance & Grade Management System</h3>') == 1
+          print('Verification passed.')
+          PY
+          rm -f .github/workflows/add-student-presentation-button.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/add-student-presentation-button.yml
+          git commit -m "Add presentation button for student attendance project"
+          git push
